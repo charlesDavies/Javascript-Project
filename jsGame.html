@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>jsGame</title>
+    <script src="//cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+    <style type="text/css">
+        body {
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <script type="text/javascript">
+
+        var config = {
+            type: Phaser.AUTO,
+            width: 1540,
+            height: 722,
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 300 },
+                    debug: false
+                }
+            },
+            scene: {
+                preload: preload,
+                create: create,
+                update: update
+            }
+        };
+
+        var game = new Phaser.Game(config);
+        var gameOver = false;
+        var health = 5;
+        var scoreText;
+        var time = 0;
+        var timeText;
+        var byeBombs;
+        var timedEvent2;
+        var beerPowerUp = false;
+        var gameOverText;
+
+
+        function preload() {
+            this.load.image('sky', 'assets/sky.png');
+            this.load.image('apple', 'assets/apple.png');
+            this.load.image('steak', 'assets/Steak.png');
+            this.load.image('beer', 'assets/Beer.png');
+            this.load.image('space', 'assets/space.jpg');
+            this.load.image('ground', 'assets/platform2.png');
+            this.load.image('star', 'assets/star.png');
+            this.load.image('bomb', 'assets/bomb.png');
+            this.load.audio('oof', 'assets/oof.mp3');
+            this.load.audio('bg', 'assets/DnB.mp3');
+            this.load.spritesheet('dude', 'assets/dude.png', { frameWidth: 32, frameHeight: 48 });
+        }
+
+        function create() {
+            this.add.image(600, 300, 'space');
+            platforms = this.physics.add.staticGroup();
+            randomBomb = this.physics.add.group();
+            apple = this.physics.add.group();
+            steak = this.physics.add.group();
+            beer = this.physics.add.group();
+
+            oof = this.sound.add("oof", { loop: false });
+            bgMusic = this.sound.add('bg', { loop: true });
+            bgMusic.play();
+
+
+
+            controls = this.input.keyboard.createCursorKeys();
+
+            platforms.create(400, 750, 'ground').setScale(2).refreshBody();
+            platforms.create(1100, 750, 'ground').setScale(2).refreshBody();
+            apple.create(60, 0, 'apple');
+            steak.create(700, 0, 'steak');
+            beer.create(500, 0, 'beer');
+
+            //apple.setBounce(0.3);
+
+
+            player = this.physics.add.sprite(100, 450, 'dude');
+            var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
+            randomBomb.create(x, 16, 'bomb');
+            //enemy = this.physics.add.image(1110, 450, 'enemy');
+
+            player.setBounce(0.1);
+            player.setCollideWorldBounds(true);
+            this.physics.add.collider(player, platforms);
+            
+
+            this.anims.create({
+                key: 'left',
+                frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 3 }),
+                frameRate: 10,
+                repeat: -1
+            })
+
+            this.anims.create({
+                key: 'turn',
+                frames: [{ key: 'dude', frame: 4 }],
+                frameRate: 20
+            })
+
+            this.anims.create({
+                key: 'right',
+                frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }),
+                frameRate: 10,
+                repeat: -1
+            })
+
+            bombs = this.physics.add.group({
+                key: 'bomb',
+                repeat: 20,
+                setXY: { x: Phaser.Math.FloatBetween(1, 12), y: 0, stepX: Phaser.Math.FloatBetween(60, 90) }
+            });
+
+
+
+            bombs.children.iterate(function (child) {
+
+                child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
+                //console.log(child.y);
+                //console.log(child.body.acceleration);
+
+            });
+
+
+
+            apple.children.iterate(function (child) {
+                child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
+            })
+
+            steak.children.iterate(function (child) {
+                child.setBounceY(Phaser.Math.FloatBetween(0.2, 0.4));
+            })
+
+            beer.children.iterate(function (child) {
+                child.setBounceY(Phaser.Math.FloatBetween(0.2, 0.4));
+            })
+
+            randomBomb.children.iterate(function (child) {
+                child.setBounceY(1);
+                child.setVelocity(Phaser.Math.Between(-200, 200), 20);
+            })
+
+
+            scoreText = this.add.text(16, 16, 'Health: ' + health, { fontsize: '32px', fill: 'white' });
+            timeText = this.add.text(300, 16, "Time Survived: " + time, { fontsize: '32px', fill: 'white' });
+
+
+
+            //this.physics.add.collider(bombs, platforms);
+            this.physics.add.collider(apple, platforms);
+            this.physics.add.collider(steak, platforms);
+            this.physics.add.collider(beer, platforms);
+            this.physics.add.collider(randomBomb, platforms);
+            this.physics.add.overlap(player, randomBomb, damageHealth, null, this);
+            this.physics.add.overlap(player, bombs, damageHealth, null, this);
+            this.physics.add.overlap(player, apple, healHealth, null, this);
+            this.physics.add.overlap(player, steak, healMoreHealth, null, this);
+            this.physics.add.overlap(player, beer, beerSpeed, null, this);
+
+
+
+
+
+            if (gameOver === false) {
+                timedEvent = this.time.addEvent({ delay: 2000, callback: createBombs, callbackScope: this });
+                timedEvent2 = this.time.addEvent({ delay: 1000, callback: addTime, callbackScope: this });
+                timedEvent3 = this.time.addEvent({ delay: 8000, callback: createApple, callbackScope: this });
+                yetAnotherTimedEvent = this.time.addEvent({ delay: 5000, callback: createSteak, callbackScope: this });
+                anotherTimedEvent = this.time.addEvent({delay: 7000, callback: createBeer, callbackScope: this});
+                //timedEvent4 = this.time.addEvent({ delay: 1000, callback: createRandomBombs(player), callbackScope: this });
+            }
+
+
+        }
+
+        function update() {
+
+            timeText.setText("Time Survived: " + time);
+
+
+
+            if (gameOver) {
+                gameOverText = this.add.text(725, 300, "GAME OVER!", { fontsize: '500px', fill: 'white' });
+                return;
+            }
+            if (controls.left.isDown) {
+                if (beerPowerUp === true) {
+                    player.setVelocityX(-400);
+                }
+                else {
+                    player.setVelocityX(-200);
+                }
+                player.anims.play('left', true);
+            }
+            else if (controls.right.isDown) {
+                if (beerPowerUp === true) {
+                    player.setVelocityX(400);
+                }
+                else {
+                    player.setVelocityX(200);
+                }
+                player.anims.play('right', true);
+            }
+            else {
+                player.setVelocityX(0);
+                player.anims.play('turn');
+            }
+
+            if (controls.up.isDown && player.body.touching.down) {
+                player.setVelocityY(-250);
+            }
+
+
+
+        }
+
+        function damageHealth(player, bomb) {
+            oof.play();
+            bomb.disableBody(true, true);
+
+            // bombs.children.iterate(function (child) {
+
+            //     child.disableBody(true, true);
+
+            // });
+            health -= 1;
+            scoreText.setText("Health: " + health);
+            if (health === 0) {
+                gameOver = true;
+                this.physics.pause();
+
+                player.setTint(0xff0000);
+
+                player.anims.play('turn');
+            }
+
+        }
+
+        function healHealth(player, apple) {
+            apple.disableBody(true, true);
+            health += 1;
+            scoreText.setText("Health: " + health);
+        }
+
+        function healMoreHealth(player, steak) {
+            steak.disableBody(true, true);
+            health += 3;
+            scoreText.setText("Health: " + health);
+        }
+
+        function createBombs() {
+
+            var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
+
+            console.log(x);
+
+            bombs = this.physics.add.group({
+                key: 'bomb',
+                repeat: Phaser.Math.FloatBetween(25, 40),
+                setXY: { x: Phaser.Math.FloatBetween(1, 12), y: Phaser.Math.FloatBetween(0, 6), stepX: Phaser.Math.FloatBetween(50, 90) }
+            });
+
+            bombs.children.iterate(function (child) {
+
+                child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
+            });
+
+            bombs2 = this.physics.add.group();
+            bombs2.create(x, 16, 'bomb');
+            bombs2.children.iterate(function (child) {
+                child.setBounceY(Phaser.Math.FloatBetween(1));
+                child.setVelocity(Phaser.Math.Between(-200, 200), 20);
+                
+            });
+
+            this.physics.add.overlap(player, bombs, damageHealth, null, this);
+
+            this.physics.add.overlap(player, bombs2, damageHealth, null, this);
+            
+
+            if (gameOver === false) {
+                if (time < 20) {
+                    timedEvent = this.time.addEvent({ delay: 2000, callback: createBombs, callbackScope: this });
+                    
+                }
+                else if (time > 20 && time < 40) {
+                    timedEvent = this.time.addEvent({ delay: 1500, callback: createBombs, callbackScope: this });
+                    bombs.setVelocityY(-200);
+
+
+                }
+                else if (time > 40 && time < 70) {
+                    timedEvent = this.time.addEvent({ delay: 1000, callback: createBombs, callbackScope: this });
+                    bombs.setVelocityY(-300);
+                    bombs2.create(x, 16, 'bomb');
+                    bombs2.children.iterate(function (child) {
+                        child.setBounceY(Phaser.Math.FloatBetween(1));
+                        child.setVelocity(Phaser.Math.Between(-300, 300), 30);
+                    });
+                }
+                else if (time >= 70) {
+                    timedEvent = this.time.addEvent({ delay: 900, callback: createBombs, callbackScope: this });
+                    bombs.setVelocityY(-400);
+                    bombs2.create(x, 16, 'bomb');
+                    bombs2.children.iterate(function (child) {
+                        child.setBounceY(Phaser.Math.FloatBetween(1));
+                        child.setVelocity(Phaser.Math.Between(-400, 400), 40);
+        
+                    });
+
+
+                }
+
+            }
+
+
+
+
+        }
+
+        function destroyBombs(bombs) {
+            bombs.children.iterate(function (child) {
+
+                child.disableBody(true, true);
+
+            });
+        }
+
+        function checkAcel(bombs) {
+            bombs.children.iterate(function (child) {
+                console.log(child.acceleration);
+            })
+
+        }
+
+        function addTime() {
+            time += 1;
+            if (gameOver === false) {
+                timedEvent2 = this.time.addEvent({ delay: 1000, callback: addTime, callbackScope: this });
+    
+            }
+        }
+
+        function createApple() {
+
+
+            apple = this.physics.add.group();
+            apple.create(Phaser.Math.FloatBetween(10, 800), 0, 'apple');
+
+            apple.children.iterate(function (child) {
+                child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
+            })
+
+            this.physics.add.collider(apple, platforms);
+            this.physics.add.overlap(player, apple, healHealth, null, this);
+
+            if (gameOver === false) {
+                timedEvent = this.time.addEvent({ delay: 5000, callback: createApple, callbackScope: this });
+
+            }
+
+
+
+        }
+
+        function createSteak() {
+            var y = Phaser.Math.FloatBetween(1, 10);
+            console.log(y);
+
+            if (y > 7) {
+
+                steak.create(Phaser.Math.FloatBetween(10, 1000), 0, 'steak');
+
+                steak.children.iterate(function (child) {
+                    child.setBounceY(Phaser.Math.FloatBetween(0.2, 0.4));
+                })
+
+                this.physics.add.collider(steak, platforms);
+                this.physics.add.overlap(player, steak, healMoreHealth, null, this);
+
+            }
+
+            if (gameOver === false) {
+                timedEvent = this.time.addEvent({ delay: 6000, callback: createSteak, callbackScope: this });
+
+            }
+        }
+
+        function createBeer() {
+            var y = Phaser.Math.FloatBetween(1, 10);
+            if (y <  4) {
+                beer.create(Phaser.Math.FloatBetween(10, 1000), 0, 'beer');
+                beer.children.iterate(function (child) {
+                    child.setBounceY(Phaser.Math.FloatBetween(0.3, 0.5));
+                });
+
+                this.physics.add.collider(beer, platforms);
+                this.physics.add.overlap(player, beer, beerSpeed, null, this);
+            }
+
+            if (gameOver === false) {
+                timedEvent = this.time.addEvent({delay : 8000, callback: createBeer, callbackScope: this});
+            }
+        }
+
+        function beerSpeed(player, beer) {
+            beer.disableBody(true, true);
+            beerPowerUp = true;
+            var x = time + 6;
+            timedEvent = this.time.addEvent({delay : 8000, callback: turnBeerPowerupOff, callbackScope: this});
+           
+
+        }
+
+        function turnBeerPowerupOff(){
+            beerPowerUp = false;
+        }
+
+
+
+
+
+
+
+
+
+    </script>
+
+</body>
+
+</html>
